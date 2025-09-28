@@ -1,0 +1,54 @@
+[build]
+builder = "nixpacks"
+
+[build.args]
+MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
+PYTHON_VERSION = "3.11"
+
+[deploy]
+startCommand = "python railway_app.py"
+healthcheckPath = "/health"
+
+[[services]]
+name = "saems-tunes-ai-api"
+type = "web"
+port = 8000
+
+[services.env]
+PORT = 8000
+MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
+RAILWAY_ENVIRONMENT = "production"
+LOG_LEVEL = "INFO"
+MAX_RESPONSE_LENGTH = "500"
+
+[services.scaling]
+min = 1
+max = 3
+cpu = 2048
+memory = 4096
+
+[services.healthcheck]
+path = "/health"
+interval = 30
+timeout = 10
+threshold = 3
+
+[[services.envs]]
+key = "PYTHONUNBUFFERED"
+value = "1"
+
+[[services.envs]]
+key = "PYTHONPATH"
+value = "/app"
+
+[environments.production]
+[environments.production.variables]
+LOG_LEVEL = "INFO"
+
+[environments.staging]
+[environments.staging.variables]
+LOG_LEVEL = "DEBUG"
+
+[environments.development]
+[environments.development.variables]
+LOG_LEVEL = "DEBUG"

@@ -1,0 +1,124 @@
+groups:
+  - name: saems_tunes_ai_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: ai_error_rate_percent > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: ai-system
+        annotations:
+          summary: "High error rate in AI system"
+          description: "AI system error rate is {{ $value }}% for more than 5 minutes"
+
+      - alert: CriticalErrorRate
+        expr: ai_error_rate_percent > 25
+        for: 2m
+        labels:
+          severity: critical
+          service: ai-system
+        annotations:
+          summary: "Critical error rate in AI system"
+          description: "AI system error rate is {{ $value }}% for more than 2 minutes"
+
+      - alert: HighResponseTime
+        expr: ai_response_time_95th_percentile > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: ai-system
+        annotations:
+          summary: "High response time in AI system"
+          description: "AI system 95th percentile response time is {{ $value }}s"
+
+      - alert: SystemMemoryHigh
+        expr: ai_system_memory_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High memory usage"
+          description: "System memory usage is {{ $value }}%"
+
+      - alert: SystemCPUHigh
+        expr: ai_system_cpu_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High CPU usage"
+          description: "System CPU usage is {{ $value }}%"
+
+      - alert: DiskSpaceLow
+        expr: ai_system_disk_percent > 90
+        for: 2m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is {{ $value }}%"
+
+      - alert: ModelInferenceErrors
+        expr: rate(ai_inference_requests_total{status="error"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: ai-system
+        annotations:
+          summary: "High model inference error rate"
+          description: "Model inference error rate is high"
+
+      - alert: CacheHitRateLow
+        expr: ai_cache_hit_rate_percent < 20
+        for: 10m
+        labels:
+          severity: warning
+          service: ai-system
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value }}%"
+
+      - alert: ThroughputSpike
+        expr: rate(ai_inference_requests_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: ai-system
+        annotations:
+          summary: "High request throughput"
+          description: "Request throughput is {{ $value }} requests/minute"
+
+      - alert: SecurityThreatDetected
+        expr: rate(security_threats_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "High security threat rate"
+          description: "Security threat detection rate is {{ $value }} threats/minute"
+
+  - name: supabase_alerts
+    rules:
+      - alert: SupabaseConnectionFailed
+        expr: up{job="saems-tunes-ai"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Supabase connection failed"
+          description: "Cannot connect to Supabase database"
+
+      - alert: SupabaseHighLatency
+        expr: supabase_query_duration_seconds{quantile="0.95"} > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High Supabase query latency"
+          description: "Supabase 95th percentile query latency is {{ $value }}s"

@@ -1,0 +1,65 @@
+environment: production
+
+model:
+  name: microsoft/Phi-3.5-mini-instruct
+  quantization: Q4_K_M
+  context_length: 4096
+  max_response_length: 500
+
+api:
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_capacity: 10
+  security:
+    input_sanitization: true
+    suspicious_pattern_detection: true
+    max_input_length: 10000
+  cors:
+    allowed_origins:
+      - "https://www.saemstunes.com"
+      - "https://saemstunes.com"
+    allowed_methods: ["GET", "POST", "OPTIONS"]
+    allowed_headers: ["*"]
+
+monitoring:
+  enabled: true
+  metrics:
+    - response_time
+    - error_rate
+    - system_resources
+    - user_activity
+    - model_performance
+  alerts:
+    - high_error_rate:
+        threshold: 5%
+        duration: 5m
+    - slow_response:
+        threshold: 10s
+        duration: 2m
+    - system_overload:
+        cpu_threshold: 80%
+        memory_threshold: 90%
+        duration: 5m
+
+supabase:
+  max_retries: 3
+  timeout: 30
+  connection_pool_size: 10
+
+caching:
+  enabled: true
+  ttl: 300
+  max_size: 1000
+
+logging:
+  level: INFO
+  format: json
+  file_rotation: "10 MB"
+  max_files: 5
+
+deployment:
+  primary: "huggingface_spaces"
+  backup: "railway"
+  health_check_interval: 30
+  auto_restart: true

@@ -1,0 +1,56 @@
+{
+  "space_name": "saemstunes/STA-AI",
+  "model_used": "microsoft/Phi-3.5-mini-instruct",
+  "quantization": "Q4_K_M",
+  "deployment_type": "huggingface_spaces",
+  "version": "2.0.0",
+  "description": "AI Assistant for Saem's Tunes Music Education Platform",
+  "features": [
+    "gradio_interface",
+    "api_endpoints",
+    "supabase_integration",
+    "security_checks",
+    "performance_monitoring",
+    "rate_limiting",
+    "input_sanitization"
+  ],
+  "environment_variables": [
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "MODEL_NAME",
+    "LOG_LEVEL",
+    "MAX_RESPONSE_LENGTH"
+  ],
+  "api_endpoints": {
+    "chat": "/api/chat",
+    "health": "/api/health",
+    "models": "/api/models",
+    "stats": "/api/stats",
+    "feedback": "/api/feedback"
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics": [
+      "response_time",
+      "error_rate",
+      "system_resources",
+      "user_activity"
+    ],
+    "alerts": [
+      "high_error_rate",
+      "slow_response",
+      "system_overload"
+    ]
+  },
+  "security": {
+    "rate_limiting": true,
+    "input_sanitization": true,
+    "suspicious_pattern_detection": true,
+    "max_request_size": "1MB"
+  },
+  "performance": {
+    "expected_response_time": "2-5 seconds",
+    "concurrent_users": 100,
+    "availability": "99.9%"
+  }
+}

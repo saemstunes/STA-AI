@@ -1,0 +1,51 @@
+{
+  "model_name": "microsoft/Phi-3.5-mini-instruct",
+  "model_repo": "bartowski/Phi-3.5-mini-instruct-GGUF",
+  "model_file": "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+  "quantization": "Q4_K_M",
+  "parameters": "3.8B",
+  "context_length": 4096,
+  "estimated_size_gb": 2.4,
+  "recommended_ram_gb": 4,
+  "use_cases": [
+    "chat",
+    "qa",
+    "instruction_following",
+    "music_education",
+    "platform_support"
+  ],
+  "performance": {
+    "avg_response_time_ms": 2000,
+    "tokens_per_second": 50,
+    "memory_usage_gb": 3.5,
+    "cpu_usage": "medium"
+  },
+  "prompt_templates": {
+    "system_prompt": "You are the AI assistant for Saem's Tunes, a comprehensive music education and streaming platform. Provide helpful, accurate information about music streaming, educational content, platform features, and artist tools.",
+    "response_guidelines": [
+      "Be passionate about music and education",
+      "Provide specific, actionable information",
+      "Reference platform features when relevant",
+      "Keep responses concise but informative",
+      "Be encouraging and supportive"
+    ]
+  },
+  "integration": {
+    "saems_tunes_features": [
+      "music_streaming",
+      "educational_courses",
+      "artist_tools",
+      "community_features",
+      "subscription_management",
+      "technical_support"
+    ],
+    "supported_queries": [
+      "platform_how_to",
+      "music_recommendations",
+      "course_information",
+      "technical_support",
+      "artist_support",
+      "billing_help"
+    ]
+  }
+}

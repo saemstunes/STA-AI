@@ -71,15 +71,27 @@ def check_disk_space(required_gb=3):
         return True
 
 def main():
-    parser = argparse.ArgumentParser(description="Download Phi-3.5-mini-instruct model")
-    parser.add_argument("--repo", default="Thetima4/Phi-3.5-mini-instruct-Q4_K_M-GGUF",
-                       help="Hugging Face repository ID")
-    parser.add_argument("--file", default="Phi-3.5-mini-instruct-q4_k_m.gguf",
-                       help="Model filename")
-    parser.add_argument("--dir", default="./models",
-                       help="Local directory to save the model")
-    parser.add_argument("--force", action="store_true",
-                       help="Force download even if file exists")
+    parser = argparse.ArgumentParser(description="Download TinyLlama-1.1B-Chat model")
+    parser.add_argument(
+        "--repo",
+        default="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+        help="Hugging Face repository ID"
+    )
+    parser.add_argument(
+        "--file",
+        default="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+        help="Model filename"
+    )
+    parser.add_argument(
+        "--dir",
+        default="./models",
+        help="Local directory to save the model"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force download even if file exists"
+    )
     
     args = parser.parse_args()
     

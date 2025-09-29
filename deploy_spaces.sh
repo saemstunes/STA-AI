@@ -2,7 +2,7 @@
 echo "🚀 DEPLOYING SAEM'S TUNES AI TO HUGGING FACE SPACES"
 
 # Configuration
-SPACE_NAME="saemstunes/saems-tunes-ai-pro"
+SPACE_NAME="saemstunes/STA-AI"
 MODEL_REPO="Thetima4/Phi-3.5-mini-instruct-Q4_K_M-GGUF"
 MODEL_FILE="Phi-3.5-mini-instruct-q4_k_m.gguf"
 
@@ -19,7 +19,7 @@ wget -O models/phi3.5-mini.Q4_K_M.gguf \
 # Create configuration files
 cat > config/spaces_config.json << EOF
 {
-    "space_name": "saems-tunes-ai-pro",
+    "space_name": "STA-AI",
     "model_used": "Phi-3.5-mini-instruct-Q4_K_M",
     "deployment_date": "$(date -I)",
     "features": [

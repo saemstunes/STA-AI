@@ -25,7 +25,7 @@ class Config:
     SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
     MODEL_NAME = os.getenv("MODEL_NAME", "microsoft/Phi-3.5-mini-instruct")
     HF_SPACE = os.getenv("HF_SPACE", "saemstunes/STA-AI")
-    PORT = int(os.getenv("PORT", 7860))
+    PORT = int(os.getenv("PORT", 8000))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", "500"))
     ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "true").lower() == "true"

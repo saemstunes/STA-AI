@@ -24,36 +24,38 @@ from src.monitoring_system import ComprehensiveMonitor
 class Config:
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
-    MODEL_NAME = os.getenv("MODEL_NAME", "microsoft/Phi-3.5-mini-instruct")
+    MODEL_NAME = os.getenv("MODEL_NAME", "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF")
+    MODEL_REPO = os.getenv("MODEL_REPO", "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF")
+    MODEL_FILE = os.getenv("MODEL_FILE", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
     HF_SPACE = os.getenv("HF_SPACE", "saemstunes/STA-AI")
     PORT = int(os.getenv("PORT", 8000))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", "500"))
+    TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
+    TOP_P = float(os.getenv("TOP_P", "0.9"))
+    CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "2048"))
     ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "true").lower() == "true"
 
 logging.basicConfig(
     level=getattr(logging, Config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('saems_ai.log')
-    ]
+    handlers=[logging.StreamHandler()]  # Only StreamHandler for Hugging Face Spaces
 )
 logger = logging.getLogger(__name__)
 
-# Global systems and initialization state
 supabase_integration = None
 security_system = None
 monitor = None
 ai_system = None
 systems_ready = False
 initialization_complete = False
+initialization_errors = []
+initialization_start_time = None
 
 def initialize_systems():
-    """Initialize systems in background thread"""
-    global supabase_integration, security_system, monitor, ai_system, systems_ready, initialization_complete
+    global supabase_integration, security_system, monitor, ai_system, systems_ready, initialization_complete, initialization_errors
     
-    logger.info("🚀 Starting background system initialization...")
+    logger.info("🚀 Initializing Saem's Tunes AI System...")
     
     try:
         supabase_integration = AdvancedSupabaseIntegration(
@@ -65,136 +67,48 @@ def initialize_systems():
         security_system = AdvancedSecuritySystem()
         logger.info("✅ Security system initialized")
         
-        monitor = ComprehensiveMonitor()
+        monitor = ComprehensiveMonitor(prometheus_port=8001)
         logger.info("✅ Monitoring system initialized")
         
         ai_system = SaemsTunesAISystem(
-            supabase_integration, 
-            security_system, 
-            monitor,
+            supabase_integration=supabase_integration,
+            security_system=security_system,
+            monitor=monitor,
             model_name=Config.MODEL_NAME,
-            max_response_length=Config.MAX_RESPONSE_LENGTH
+            model_repo=Config.MODEL_REPO,
+            model_file=Config.MODEL_FILE,
+            max_response_length=Config.MAX_RESPONSE_LENGTH,
+            temperature=Config.TEMPERATURE,
+            top_p=Config.TOP_P,
+            context_window=Config.CONTEXT_WINDOW
         )
         logger.info("✅ AI system initialized")
         
-        systems_ready = True
-        initialization_complete = True
-        logger.info("🎉 All systems ready!")
+        if ai_system.is_healthy():
+            systems_ready = True
+            initialization_complete = True
+            logger.info("🎉 All systems initialized successfully!")
+        else:
+            initialization_errors.append("AI system health check failed")
+            initialization_complete = True
         
         return True
         
     except Exception as e:
-        logger.error(f"❌ Failed to initialize systems: {e}")
+        error_msg = f"System initialization failed: {str(e)}"
+        logger.error(error_msg)
+        initialization_errors.append(error_msg)
         initialization_complete = True
         return False
 
-def start_initialization():
-    """Start system initialization in background thread"""
-    thread = threading.Thread(target=initialize_systems, daemon=True)
-    thread.start()
-
-# Start initialization immediately when module loads
-start_initialization()
-
-# Create FastAPI app at MODULE LEVEL (required by Hugging Face)
-fastapi_app = FastAPI(title="Saem's Tunes AI API", version="1.0.0")
-
-# ADD ROOT ROUTE - Hugging Face checks this!
-@fastapi_app.get("/")
-def root():
-    """Root endpoint for Hugging Face health checks"""
-    return {
-        "status": "healthy" if systems_ready else "initializing",
-        "message": "Saem's Tunes AI API is running",
-        "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0",
-        "systems_ready": systems_ready,
-        "initialization_complete": initialization_complete
-    }
-
-@fastapi_app.get("/api/health")
-def api_health():
-    """Health check endpoint"""
-    try:
-        status_data = get_system_status()
-        return status_data
-    except Exception as e:
-        logger.error(f"Health endpoint error: {e}")
-        return JSONResponse(
-            content={"status": "error", "error": str(e)},
-            status_code=500
-        )
-
-@fastapi_app.get("/api/models")
-def api_models():
-    models_info = {
-        "available_models": ["microsoft/Phi-3.5-mini-instruct"],
-        "current_model": Config.MODEL_NAME,
-        "quantization": "Q4_K_M",
-        "context_length": 4096,
-        "parameters": "3.8B"
-    }
-    return models_info
-
-@fastapi_app.get("/api/stats")
-def api_stats():
-    if not monitor:
-        return JSONResponse(
-            content={"error": "Monitoring system not available"},
-            status_code=503
-        )
+def initialize_systems_background():
+    """Run system initialization in background thread"""
+    global initialization_start_time
+    initialization_start_time = time.time()
     
-    stats_data = {
-        "total_requests": len(monitor.inference_metrics),
-        "average_response_time": monitor.get_average_response_time(),
-        "error_rate": monitor.get_error_rate(),
-        "uptime": monitor.get_uptime(),
-        "system_health": get_system_status()
-    }
-    return stats_data
-
-@fastapi_app.post("/api/chat")
-def api_chat(request: ChatRequest):
-    try:
-        if not request.message.strip():
-            raise HTTPException(status_code=400, detail="Message cannot be empty")
-        
-        if not systems_ready:
-            raise HTTPException(status_code=503, detail="System is still initializing. Please try again in a moment.")
-        
-        security_result = security_system.check_request(request.message, request.user_id)
-        if security_result["is_suspicious"]:
-            raise HTTPException(status_code=429, detail="Request blocked for security reasons")
-        
-        start_time = time.time()
-        response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
-        processing_time = time.time() - start_time
-        
-        return {
-            "response": response,
-            "processing_time": processing_time,
-            "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
-            "timestamp": datetime.now().isoformat(),
-            "model_used": Config.MODEL_NAME
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"API chat error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-class ChatRequest(BaseModel):
-    message: str
-    user_id: Optional[str] = "anonymous"
-    conversation_id: Optional[str] = None
-
-class ChatResponse(BaseModel):
-    response: str
-    processing_time: float
-    conversation_id: str
-    timestamp: str
-    model_used: str
+    thread = threading.Thread(target=initialize_systems)
+    thread.daemon = True
+    thread.start()
 
 def chat_interface(message: str, history: List[List[str]], request: gr.Request) -> str:
     try:
@@ -202,7 +116,7 @@ def chat_interface(message: str, history: List[List[str]], request: gr.Request) 
             return "Please ask me anything about Saem's Tunes!"
         
         if not systems_ready:
-            return "🔄 System is still initializing. Please wait a moment and try again..."
+            return "🔄 Systems are still initializing. Please wait a moment and try again..."
         
         client_host = getattr(request, "client", None)
         if client_host:
@@ -235,15 +149,16 @@ def get_system_status() -> Dict[str, Any]:
         return {
             "status": "initializing", 
             "details": "Systems are starting up...",
-            "systems_ready": systems_ready,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "initialization_started": initialization_start_time is not None,
+            "duration_seconds": time.time() - initialization_start_time if initialization_start_time else 0
         }
     
     if not systems_ready:
         return {
             "status": "degraded",
-            "details": "Systems initialized but not ready",
-            "systems_ready": systems_ready,
+            "details": "Systems initialized but not fully ready",
+            "errors": initialization_errors,
             "timestamp": datetime.now().isoformat()
         }
     
@@ -253,9 +168,10 @@ def get_system_status() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
             "systems": {
                 "supabase": supabase_integration.is_connected() if supabase_integration else False,
-                "security": True,
-                "monitoring": True,
-                "ai_system": ai_system.is_healthy() if ai_system else False
+                "security": bool(security_system),
+                "monitoring": bool(monitor),
+                "ai_system": ai_system.is_healthy() if ai_system else False,
+                "model_loaded": ai_system.model_loaded if ai_system else False
             },
             "resources": {
                 "cpu_percent": psutil.cpu_percent(),
@@ -263,14 +179,137 @@ def get_system_status() -> Dict[str, Any]:
                 "disk_percent": psutil.disk_usage('/').percent
             },
             "performance": {
-                "total_requests": len(monitor.inference_metrics),
-                "avg_response_time": monitor.get_average_response_time(),
-                "error_rate": monitor.get_error_rate()
-            },
-            "systems_ready": systems_ready
+                "total_requests": len(monitor.inference_metrics) if monitor else 0,
+                "avg_response_time": monitor.get_average_response_time() if monitor else 0,
+                "error_rate": monitor.get_error_rate() if monitor else 0
+            }
         }
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return {
+            "status": "error", 
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: Optional[str] = "anonymous"
+    conversation_id: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    processing_time: float
+    conversation_id: str
+    timestamp: str
+    model_used: str
+
+# Create FastAPI app at module level - REQUIRED FOR HUGGING FACE
+fastapi_app = FastAPI(title="Saem's Tunes AI API", version="2.0.0")
+
+# Add root route - REQUIRED FOR HUGGING FACE HEALTH CHECKS
+@fastapi_app.get("/")
+def root():
+    """Root endpoint for Hugging Face health checks"""
+    return {
+        "status": "healthy" if systems_ready else "initializing",
+        "message": "Saem's Tunes AI API is running",
+        "timestamp": datetime.now().isoformat(),
+        "version": "2.0.0",
+        "environment": "huggingface-spaces"
+    }
+
+@fastapi_app.get("/api/health")
+def api_health():
+    try:
+        status_data = get_system_status()
+        return status_data
+    except Exception as e:
+        logger.error(f"Health endpoint error: {e}")
+        return JSONResponse(
+            content={"status": "error", "error": str(e)},
+            status_code=500
+        )
+
+@fastapi_app.get("/api/models")
+def api_models():
+    models_info = {
+        "available_models": ["TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"],
+        "current_model": Config.MODEL_NAME,
+        "model_repo": Config.MODEL_REPO,
+        "model_file": Config.MODEL_FILE,
+        "quantization": "Q4_K_M",
+        "context_length": Config.CONTEXT_WINDOW,
+        "parameters": "1.1B",
+        "max_response_length": Config.MAX_RESPONSE_LENGTH,
+        "temperature": Config.TEMPERATURE,
+        "top_p": Config.TOP_P
+    }
+    
+    if ai_system and systems_ready:
+        try:
+            model_stats = ai_system.get_model_stats()
+            models_info.update(model_stats)
+        except Exception as e:
+            logger.warning(f"Could not get model stats: {e}")
+    
+    return models_info
+
+@fastapi_app.get("/api/stats")
+def api_stats():
+    if not monitor or not systems_ready:
+        return JSONResponse(
+            content={
+                "status": "initializing" if not systems_ready else "degraded",
+                "systems_ready": systems_ready,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=200  # Always return 200 for Hugging Face
+        )
+    
+    stats_data = {
+        "status": "healthy",
+        "total_requests": len(monitor.inference_metrics),
+        "average_response_time": monitor.get_average_response_time(),
+        "error_rate": monitor.get_error_rate(),
+        "uptime": monitor.get_uptime(),
+        "system_health": get_system_status(),
+        "timestamp": datetime.now().isoformat()
+    }
+    return stats_data
+
+@fastapi_app.post("/api/chat")
+def api_chat(request: ChatRequest):
+    try:
+        if not request.message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+        if not systems_ready:
+            raise HTTPException(
+                status_code=503, 
+                detail="Systems are still initializing. Please try again in a moment."
+            )
+        
+        security_result = security_system.check_request(request.message, request.user_id)
+        if security_result["is_suspicious"]:
+            raise HTTPException(status_code=429, detail="Request blocked for security reasons")
+        
+        start_time = time.time()
+        response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
+        processing_time = time.time() - start_time
+        
+        return {
+            "response": response,
+            "processing_time": processing_time,
+            "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
+            "timestamp": datetime.now().isoformat(),
+            "model_used": Config.MODEL_NAME
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"API chat error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 def create_gradio_interface():
     custom_css = """
@@ -334,7 +373,7 @@ def create_gradio_interface():
         <div class="header">
             <h1 style="margin: 0; font-size: 2.2em;">🎵 Saem's Tunes AI Assistant</h1>
             <p style="margin: 10px 0 0 0; font-size: 1.1em; opacity: 0.9;">
-                Powered by Microsoft Phi-3.5-mini-instruct • Built for music education and streaming
+                Powered by TinyLlama 1.1B • Built for music education and streaming
             </p>
         </div>
         """)
@@ -408,11 +447,11 @@ def create_gradio_interface():
         gr.Markdown("""
         <div class="footer">
             <p>
-                <strong>Powered by Microsoft Phi-3.5-mini-instruct</strong> • 
+                <strong>Powered by TinyLlama 1.1B Chat</strong> • 
                 <a href="https://www.saemstunes.com" target="_blank">Saem's Tunes Music Platform</a>
             </p>
             <p style="font-size: 0.9em; opacity: 0.7;">
-                Model: Q4_K_M quantization • Context: 4K tokens • Response time: ~2-5s
+                Model: Q4_K_M quantization • Context: 2K tokens • Response time: ~2-5s
             </p>
         </div>
         """)
@@ -431,12 +470,18 @@ def create_gradio_interface():
                 <small>
                     Supabase: {'✅' if systems.get('supabase') else '❌'} |
                     AI System: {'✅' if systems.get('ai_system') else '❌'} |
+                    Model: {'✅' if systems.get('model_loaded') else '❌'} |
                     CPU: {resources.get('cpu_percent', 0):.1f}% |
                     Memory: {resources.get('memory_percent', 0):.1f}%
                 </small>
                 """
             elif status_text == "initializing":
-                html = f"<div class='status-indicator {status_class}'></div>Systems initializing... (This may take a few minutes)"
+                duration = status.get('duration_seconds', 0)
+                html = f"""
+                <div class='status-indicator {status_class}'></div>
+                <strong>System Status: Initializing</strong><br>
+                <small>Started {duration:.0f}s ago • Downloading AI model...</small>
+                """
             else:
                 html = f"<div class='status-indicator {status_class}'></div>{status.get('details', 'Unknown status')}"
             
@@ -495,20 +540,15 @@ def create_gradio_interface():
     
     return demo
 
-# Create Gradio interface and mount to FastAPI at MODULE LEVEL
+# Create Gradio interface and mount to FastAPI - AT MODULE LEVEL FOR HUGGING FACE
 demo = create_gradio_interface()
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
+# Start background initialization
+initialize_systems_background()
+
 if __name__ == "__main__":
-    logger.info("🎵 Starting Saem's Tunes AI locally...")
-    
-    # For local development, wait for initialization
-    if not initialization_complete:
-        logger.info("⏳ Waiting for system initialization...")
-        for i in range(30):  # Wait up to 30 seconds
-            if initialization_complete:
-                break
-            time.sleep(1)
+    logger.info("🎵 Starting Saem's Tunes AI on Hugging Face Spaces...")
     
     import uvicorn
     uvicorn.run(

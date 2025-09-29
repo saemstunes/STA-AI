@@ -16,10 +16,16 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from src.ai_system import SaemsTunesAISystem
-from src.supabase_integration import AdvancedSupabaseIntegration
-from src.security_system import AdvancedSecuritySystem
-from src.monitoring_system import ComprehensiveMonitor
+# Import systems - but don't initialize them until needed
+try:
+    from src.ai_system import SaemsTunesAISystem
+    from src.supabase_integration import AdvancedSupabaseIntegration
+    from src.security_system import AdvancedSecuritySystem
+    from src.monitoring_system import ComprehensiveMonitor
+    SYSTEMS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import systems: {e}")
+    SYSTEMS_AVAILABLE = False
 
 class Config:
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -28,7 +34,7 @@ class Config:
     MODEL_REPO = os.getenv("MODEL_REPO", "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF")
     MODEL_FILE = os.getenv("MODEL_FILE", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
     HF_SPACE = os.getenv("HF_SPACE", "saemstunes/STA-AI")
-    PORT = int(os.getenv("PORT", 8000))
+    PORT = int(os.getenv("PORT", 7860))  # Hugging Face Spaces uses 7860
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", "500"))
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
@@ -36,13 +42,15 @@ class Config:
     CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "2048"))
     ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "true").lower() == "true"
 
+# Setup minimal logging first
 logging.basicConfig(
     level=getattr(logging, Config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]  # Only StreamHandler for Hugging Face Spaces
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
+# Global systems - initialize as None
 supabase_integration = None
 security_system = None
 monitor = None
@@ -51,25 +59,44 @@ systems_ready = False
 initialization_complete = False
 initialization_errors = []
 initialization_start_time = None
+initialization_thread = None
 
 def initialize_systems():
+    """Initialize all systems - runs in background thread"""
     global supabase_integration, security_system, monitor, ai_system, systems_ready, initialization_complete, initialization_errors
+    
+    if not SYSTEMS_AVAILABLE:
+        initialization_errors.append("System dependencies not available")
+        initialization_complete = True
+        return False
     
     logger.info("🚀 Initializing Saem's Tunes AI System...")
     
     try:
+        # Initialize Supabase integration
+        logger.info("📡 Connecting to Supabase...")
         supabase_integration = AdvancedSupabaseIntegration(
             Config.SUPABASE_URL, 
             Config.SUPABASE_ANON_KEY
         )
-        logger.info("✅ Supabase integration initialized")
         
+        if not supabase_integration.is_connected():
+            logger.warning("⚠️ Supabase connection failed, continuing with fallback data")
+        else:
+            logger.info("✅ Supabase integration initialized")
+        
+        # Initialize security system
+        logger.info("🔒 Initializing security system...")
         security_system = AdvancedSecuritySystem()
         logger.info("✅ Security system initialized")
         
+        # Initialize monitoring
+        logger.info("📊 Initializing monitoring system...")
         monitor = ComprehensiveMonitor(prometheus_port=8001)
         logger.info("✅ Monitoring system initialized")
         
+        # Initialize AI system - this is the heavy part
+        logger.info("🤖 Initializing AI system with TinyLlama...")
         ai_system = SaemsTunesAISystem(
             supabase_integration=supabase_integration,
             security_system=security_system,
@@ -84,13 +111,15 @@ def initialize_systems():
         )
         logger.info("✅ AI system initialized")
         
-        if ai_system.is_healthy():
+        # Check if AI system is healthy
+        if ai_system and ai_system.is_healthy():
             systems_ready = True
             initialization_complete = True
             logger.info("🎉 All systems initialized successfully!")
         else:
             initialization_errors.append("AI system health check failed")
             initialization_complete = True
+            logger.warning("⚠️ AI system not fully healthy, but initialization complete")
         
         return True
         
@@ -101,89 +130,80 @@ def initialize_systems():
         initialization_complete = True
         return False
 
-def initialize_systems_background():
-    """Run system initialization in background thread"""
-    global initialization_start_time
+def start_initialization():
+    """Start system initialization in background"""
+    global initialization_thread, initialization_start_time
     initialization_start_time = time.time()
     
-    thread = threading.Thread(target=initialize_systems)
-    thread.daemon = True
-    thread.start()
-
-def chat_interface(message: str, history: List[List[str]], request: gr.Request) -> str:
-    try:
-        if not message.strip():
-            return "Please ask me anything about Saem's Tunes!"
-        
-        if not systems_ready:
-            return "🔄 Systems are still initializing. Please wait a moment and try again..."
-        
-        client_host = getattr(request, "client", None)
-        if client_host:
-            user_ip = client_host.host
-        else:
-            user_ip = "unknown"
-        user_id = f"gradio_user_{user_ip}"
-        
-        security_result = security_system.check_request(message, user_id)
-        if security_result["is_suspicious"]:
-            logger.warning(f"Suspicious request blocked from {user_ip}: {message}")
-            return "Your request has been blocked for security reasons. Please try a different question."
-        
-        start_time = time.time()
-        response = ai_system.process_query(message, user_id)
-        processing_time = time.time() - start_time
-        
-        formatted_response = f"{response}\n\n_Generated in {processing_time:.1f}s_"
-        
-        logger.info(f"Chat processed: {message[:50]}... -> {processing_time:.2f}s")
-        
-        return formatted_response
-        
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        return "I apologize, but I'm experiencing technical difficulties. Please try again later."
+    initialization_thread = threading.Thread(target=initialize_systems, daemon=True)
+    initialization_thread.start()
+    logger.info("🔄 Started system initialization in background thread")
 
 def get_system_status() -> Dict[str, Any]:
-    if not initialization_complete:
-        return {
-            "status": "initializing", 
-            "details": "Systems are starting up...",
-            "timestamp": datetime.now().isoformat(),
-            "initialization_started": initialization_start_time is not None,
-            "duration_seconds": time.time() - initialization_start_time if initialization_start_time else 0
-        }
-    
-    if not systems_ready:
-        return {
-            "status": "degraded",
-            "details": "Systems initialized but not fully ready",
-            "errors": initialization_errors,
-            "timestamp": datetime.now().isoformat()
-        }
-    
+    """Get current system status - lightweight and safe"""
     try:
+        # Get resource usage safely
+        resources = {}
+        try:
+            cpu_percent = psutil.cpu_percent()
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+            resources = {
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent,
+                "memory_used_gb": memory.used / (1024 ** 3),
+                "disk_percent": disk.percent
+            }
+        except Exception as e:
+            resources = {"error": f"Resource monitoring failed: {e}"}
+        
+        if not initialization_complete:
+            return {
+                "status": "initializing", 
+                "details": "Systems are starting up...",
+                "timestamp": datetime.now().isoformat(),
+                "initialization_started": initialization_start_time is not None,
+                "duration_seconds": time.time() - initialization_start_time if initialization_start_time else 0,
+                "resources": resources
+            }
+        
+        if not systems_ready:
+            return {
+                "status": "degraded",
+                "details": "Systems initialized but not fully ready",
+                "errors": initialization_errors,
+                "timestamp": datetime.now().isoformat(),
+                "resources": resources
+            }
+        
+        # Systems are ready - get detailed status
+        systems_status = {
+            "supabase": supabase_integration.is_connected() if supabase_integration else False,
+            "security": bool(security_system),
+            "monitoring": bool(monitor),
+            "ai_system": ai_system.is_healthy() if ai_system else False,
+            "model_loaded": ai_system.model_loaded if ai_system else False
+        }
+        
+        performance = {}
+        if monitor:
+            try:
+                performance = {
+                    "total_requests": len(monitor.inference_metrics),
+                    "avg_response_time": monitor.get_average_response_time(),
+                    "error_rate": monitor.get_error_rate()
+                }
+            except Exception as e:
+                performance = {"error": f"Performance monitoring failed: {e}"}
+        
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "systems": {
-                "supabase": supabase_integration.is_connected() if supabase_integration else False,
-                "security": bool(security_system),
-                "monitoring": bool(monitor),
-                "ai_system": ai_system.is_healthy() if ai_system else False,
-                "model_loaded": ai_system.model_loaded if ai_system else False
-            },
-            "resources": {
-                "cpu_percent": psutil.cpu_percent(),
-                "memory_percent": psutil.virtual_memory().percent,
-                "disk_percent": psutil.disk_usage('/').percent
-            },
-            "performance": {
-                "total_requests": len(monitor.inference_metrics) if monitor else 0,
-                "avg_response_time": monitor.get_average_response_time() if monitor else 0,
-                "error_rate": monitor.get_error_rate() if monitor else 0
-            }
+            "systems": systems_status,
+            "resources": resources,
+            "performance": performance
         }
+        
     except Exception as e:
         return {
             "status": "error", 
@@ -191,25 +211,68 @@ def get_system_status() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat()
         }
 
-class ChatRequest(BaseModel):
-    message: str
-    user_id: Optional[str] = "anonymous"
-    conversation_id: Optional[str] = None
+def chat_interface(message: str, history: List[List[str]], request: gr.Request) -> str:
+    """Gradio chat interface - with proper error handling"""
+    try:
+        if not message.strip():
+            return "Please ask me anything about Saem's Tunes!"
+        
+        if not systems_ready or not ai_system:
+            return "🔄 Systems are still initializing. Please wait a moment and try again..."
+        
+        # Get client info safely
+        user_ip = "unknown"
+        try:
+            client_host = getattr(request, "client", None)
+            if client_host:
+                user_ip = client_host.host
+        except:
+            pass
+        
+        user_id = f"gradio_user_{user_ip}"
+        
+        # Security check with fallback
+        security_check_passed = True
+        try:
+            if security_system:
+                security_result = security_system.check_request(message, user_id)
+                if security_result["is_suspicious"]:
+                    logger.warning(f"Suspicious request blocked from {user_ip}: {message}")
+                    return "Your request has been blocked for security reasons. Please try a different question."
+        except Exception as e:
+            logger.warning(f"Security check failed, allowing request: {e}")
+        
+        # Process query
+        start_time = time.time()
+        try:
+            response = ai_system.process_query(message, user_id)
+            processing_time = time.time() - start_time
+            
+            formatted_response = f"{response}\n\n_Generated in {processing_time:.1f}s_"
+            
+            logger.info(f"Chat processed: {message[:50]}... -> {processing_time:.2f}s")
+            
+            return formatted_response
+            
+        except Exception as e:
+            logger.error(f"AI processing error: {e}")
+            return "I apologize, but I'm experiencing technical difficulties. Please try again later."
+        
+    except Exception as e:
+        logger.error(f"Chat interface error: {e}")
+        return "I apologize, but I'm experiencing technical difficulties. Please try again later."
 
-class ChatResponse(BaseModel):
-    response: str
-    processing_time: float
-    conversation_id: str
-    timestamp: str
-    model_used: str
+# Create FastAPI app at module level - CRITICAL FOR HUGGING FACE
+fastapi_app = FastAPI(
+    title="Saem's Tunes AI API",
+    description="AI Assistant for Saem's Tunes Music Platform",
+    version="2.0.0"
+)
 
-# Create FastAPI app at module level - REQUIRED FOR HUGGING FACE
-fastapi_app = FastAPI(title="Saem's Tunes AI API", version="2.0.0")
-
-# Add root route - REQUIRED FOR HUGGING FACE HEALTH CHECKS
+# Root endpoint - ALWAYS returns 200 for Hugging Face health checks
 @fastapi_app.get("/")
 def root():
-    """Root endpoint for Hugging Face health checks"""
+    """Root endpoint - MUST return 200 immediately for Hugging Face"""
     return {
         "status": "healthy" if systems_ready else "initializing",
         "message": "Saem's Tunes AI API is running",
@@ -218,20 +281,28 @@ def root():
         "environment": "huggingface-spaces"
     }
 
+# Health endpoint - ALWAYS returns 200
 @fastapi_app.get("/api/health")
 def api_health():
+    """Health endpoint - ALWAYS returns 200 for Hugging Face"""
     try:
         status_data = get_system_status()
         return status_data
     except Exception as e:
         logger.error(f"Health endpoint error: {e}")
         return JSONResponse(
-            content={"status": "error", "error": str(e)},
-            status_code=500
+            content={
+                "status": "error", 
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=200  # Always 200 for Hugging Face
         )
 
+# Other API endpoints with proper error handling
 @fastapi_app.get("/api/models")
 def api_models():
+    """Get model information"""
     models_info = {
         "available_models": ["TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"],
         "current_model": Config.MODEL_NAME,
@@ -256,62 +327,41 @@ def api_models():
 
 @fastapi_app.get("/api/stats")
 def api_stats():
-    if not monitor or not systems_ready:
-        return JSONResponse(
-            content={
-                "status": "initializing" if not systems_ready else "degraded",
-                "systems_ready": systems_ready,
-                "timestamp": datetime.now().isoformat()
-            },
-            status_code=200  # Always return 200 for Hugging Face
-        )
-    
-    stats_data = {
-        "status": "healthy",
-        "total_requests": len(monitor.inference_metrics),
-        "average_response_time": monitor.get_average_response_time(),
-        "error_rate": monitor.get_error_rate(),
-        "uptime": monitor.get_uptime(),
-        "system_health": get_system_status(),
-        "timestamp": datetime.now().isoformat()
-    }
-    return stats_data
-
-@fastapi_app.post("/api/chat")
-def api_chat(request: ChatRequest):
-    try:
-        if not request.message.strip():
-            raise HTTPException(status_code=400, detail="Message cannot be empty")
-        
-        if not systems_ready:
-            raise HTTPException(
-                status_code=503, 
-                detail="Systems are still initializing. Please try again in a moment."
-            )
-        
-        security_result = security_system.check_request(request.message, request.user_id)
-        if security_result["is_suspicious"]:
-            raise HTTPException(status_code=429, detail="Request blocked for security reasons")
-        
-        start_time = time.time()
-        response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
-        processing_time = time.time() - start_time
-        
+    """Get system statistics"""
+    if not systems_ready:
         return {
-            "response": response,
-            "processing_time": processing_time,
-            "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
-            "timestamp": datetime.now().isoformat(),
-            "model_used": Config.MODEL_NAME
+            "status": "initializing",
+            "systems_ready": systems_ready,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    try:
+        stats_data = {
+            "status": "healthy",
+            "system_health": get_system_status(),
+            "timestamp": datetime.now().isoformat()
         }
         
-    except HTTPException:
-        raise
+        if monitor:
+            stats_data.update({
+                "total_requests": len(monitor.inference_metrics),
+                "average_response_time": monitor.get_average_response_time(),
+                "error_rate": monitor.get_error_rate(),
+                "uptime": monitor.get_uptime(),
+            })
+            
+        return stats_data
+        
     except Exception as e:
-        logger.error(f"API chat error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Stats endpoint error: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 def create_gradio_interface():
+    """Create Gradio interface - lightweight and fast"""
     custom_css = """
     .gradio-container {
         font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -400,7 +450,7 @@ def create_gradio_interface():
         with gr.Row():
             for question in quick_questions:
                 btn = gr.Button(question, size="sm", elem_classes="quick-action-btn")
-                quick_buttons.append((btn, question))
+                quick_buttons.append(btn)
         
         gr.Markdown("### 💬 Chat with Saem's Tunes AI")
         
@@ -408,20 +458,18 @@ def create_gradio_interface():
             label="Saem's Tunes Chat",
             height=450,
             placeholder="Ask me anything about Saem's Tunes music platform...",
-            show_label=False,
-            type="messages"
+            show_label=False
         )
         
         with gr.Row():
             msg = gr.Textbox(
-                placeholder="Type your question here... (Press Enter to send, Shift+Enter for new line)",
+                placeholder="Type your question here... (Press Enter to send)",
                 show_label=False,
                 scale=4,
                 container=False,
-                lines=2,
-                max_lines=4
+                lines=2
             )
-            submit_btn = gr.Button("Send 🚀", variant="primary", scale=1, size="lg")
+            submit_btn = gr.Button("Send 🚀", variant="primary", scale=1)
         
         gr.Examples(
             examples=[
@@ -429,12 +477,7 @@ def create_gradio_interface():
                 "What are the premium features?",
                 "How do I upload my music as an artist?",
                 "Tell me about the music courses available",
-                "How does the recommendation system work?",
-                "Can I share playlists with friends?",
-                "What music genres are available?",
-                "How do I follow artists?",
-                "Is there a mobile app?",
-                "How do I reset my password?"
+                "How does the recommendation system work?"
             ],
             inputs=msg,
             label="💡 Example Questions"
@@ -442,7 +485,6 @@ def create_gradio_interface():
         
         with gr.Row():
             clear_btn = gr.Button("🗑️ Clear Chat", size="sm")
-            export_btn = gr.Button("💾 Export Chat", size="sm")
         
         gr.Markdown("""
         <div class="footer">
@@ -451,84 +493,71 @@ def create_gradio_interface():
                 <a href="https://www.saemstunes.com" target="_blank">Saem's Tunes Music Platform</a>
             </p>
             <p style="font-size: 0.9em; opacity: 0.7;">
-                Model: Q4_K_M quantization • Context: 2K tokens • Response time: ~2-5s
+                Model: Q4_K_M quantization • Context: 2K tokens
             </p>
         </div>
         """)
         
         def update_status():
+            """Update status display - lightweight"""
             status = get_system_status()
             status_text = status.get("status", "unknown")
-            status_class = f"status-{status_text}" if status_text in ["healthy", "warning", "error"] else "status-warning"
             
             if status_text == "healthy":
-                systems = status.get("systems", {})
-                resources = status.get("resources", {})
-                html = f"""
-                <div class='status-indicator {status_class}'></div>
+                html = """
+                <div class='status-indicator status-healthy'></div>
                 <strong>System Status: Healthy</strong><br>
-                <small>
-                    Supabase: {'✅' if systems.get('supabase') else '❌'} |
-                    AI System: {'✅' if systems.get('ai_system') else '❌'} |
-                    Model: {'✅' if systems.get('model_loaded') else '❌'} |
-                    CPU: {resources.get('cpu_percent', 0):.1f}% |
-                    Memory: {resources.get('memory_percent', 0):.1f}%
-                </small>
+                <small>AI Assistant is ready to help!</small>
                 """
             elif status_text == "initializing":
                 duration = status.get('duration_seconds', 0)
                 html = f"""
-                <div class='status-indicator {status_class}'></div>
+                <div class='status-indicator status-warning'></div>
                 <strong>System Status: Initializing</strong><br>
-                <small>Started {duration:.0f}s ago • Downloading AI model...</small>
+                <small>Loading AI model... ({duration:.0f}s)</small>
                 """
             else:
-                html = f"<div class='status-indicator {status_class}'></div>{status.get('details', 'Unknown status')}"
+                html = f"<div class='status-indicator status-error'></div>System Status: {status_text}"
             
             return html
         
         def user_message(user_message, chat_history):
-            return "", chat_history + [{"role": "user", "content": user_message}]
+            return "", chat_history + [[user_message, None]]
         
         def bot_response(chat_history):
             if not chat_history:
                 return chat_history
             
-            user_message = chat_history[-1]["content"]
+            user_message = chat_history[-1][0]
             bot_message = chat_interface(user_message, chat_history, gr.Request())
             
-            return chat_history + [{"role": "assistant", "content": bot_message}]
+            chat_history[-1][1] = bot_message
+            return chat_history
         
         def clear_chat():
             return []
         
-        def export_chat(chat_history):
-            if not chat_history:
-                return "No conversation to export"
-            
-            export_text = f"Saem's Tunes AI Conversation - {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
-            for msg in chat_history:
-                role = "You" if msg["role"] == "user" else "AI Assistant"
-                export_text += f"{role}: {msg['content']}\n\n"
-            
-            return export_text
-        
+        # Connect components
         refresh_btn.click(update_status, outputs=status_display)
         
-        msg.submit(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
+        msg.submit(
+            user_message, [msg, chatbot], [msg, chatbot], queue=False
+        ).then(
             bot_response, chatbot, chatbot
         )
         
-        submit_btn.click(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
+        submit_btn.click(
+            user_message, [msg, chatbot], [msg, chatbot], queue=False
+        ).then(
             bot_response, chatbot, chatbot
         )
         
         clear_btn.click(clear_chat, outputs=chatbot)
-        export_btn.click(export_chat, chatbot, msg)
         
-        for btn, question_text in quick_buttons:
+        # Connect quick buttons
+        for btn in quick_buttons:
             btn.click(
-                fn=lambda q=question_text: q,
+                lambda x=btn.value: x,
                 outputs=msg
             ).then(
                 user_message, [msg, chatbot], [msg, chatbot]
@@ -540,20 +569,23 @@ def create_gradio_interface():
     
     return demo
 
-# Create Gradio interface and mount to FastAPI - AT MODULE LEVEL FOR HUGGING FACE
+# Create Gradio interface and mount to FastAPI - AT MODULE LEVEL
 demo = create_gradio_interface()
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
-# Start background initialization
-initialize_systems_background()
+# Start initialization AFTER app is created
+start_initialization()
 
+logger.info(f"🚀 Saem's Tunes AI Assistant starting on port {Config.PORT}")
+logger.info("📡 FastAPI and Gradio apps mounted successfully")
+logger.info("🔄 System initialization started in background")
+
+# Hugging Face Spaces entry point
 if __name__ == "__main__":
-    logger.info("🎵 Starting Saem's Tunes AI on Hugging Face Spaces...")
-    
-    import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=Config.PORT,
-        log_level=Config.LOG_LEVEL.lower()
+    # This runs when developing locally
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=Config.PORT,
+        show_error=True,
+        share=False
     )

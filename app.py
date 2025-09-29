@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any
 import requests
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -133,6 +136,88 @@ def get_system_status() -> Dict[str, Any]:
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: Optional[str] = "anonymous"
+    conversation_id: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    processing_time: float
+    conversation_id: str
+    timestamp: str
+    model_used: str
+
+fastapi_app = FastAPI(title="Saem's Tunes AI API", version="1.0.0")
+
+@fastapi_app.get("/api/health")
+def api_health():
+    try:
+        status_data = get_system_status()
+        return status_data
+    except Exception as e:
+        logger.error(f"Health endpoint error: {e}")
+        return JSONResponse(
+            content={"status": "error", "error": str(e)},
+            status_code=500
+        )
+
+@fastapi_app.get("/api/models")
+def api_models():
+    models_info = {
+        "available_models": ["microsoft/Phi-3.5-mini-instruct"],
+        "current_model": Config.MODEL_NAME,
+        "quantization": "Q4_K_M",
+        "context_length": 4096,
+        "parameters": "3.8B"
+    }
+    return models_info
+
+@fastapi_app.get("/api/stats")
+def api_stats():
+    if not monitor:
+        return JSONResponse(
+            content={"error": "Monitoring system not available"},
+            status_code=503
+        )
+    
+    stats_data = {
+        "total_requests": len(monitor.inference_metrics),
+        "average_response_time": monitor.get_average_response_time(),
+        "error_rate": monitor.get_error_rate(),
+        "uptime": monitor.get_uptime(),
+        "system_health": get_system_status()
+    }
+    return stats_data
+
+@fastapi_app.post("/api/chat")
+def api_chat(request: ChatRequest):
+    try:
+        if not request.message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+        security_result = security_system.check_request(request.message, request.user_id)
+        if security_result["is_suspicious"]:
+            raise HTTPException(status_code=429, detail="Request blocked for security reasons")
+        
+        start_time = time.time()
+        response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
+        processing_time = time.time() - start_time
+        
+        return {
+            "response": response,
+            "processing_time": processing_time,
+            "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
+            "timestamp": datetime.now().isoformat(),
+            "model_used": Config.MODEL_NAME
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"API chat error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 def create_gradio_interface():
     custom_css = """
@@ -355,94 +440,6 @@ def create_gradio_interface():
     
     return demo
 
-def setup_api_endpoints(demo):
-    from fastapi import FastAPI, HTTPException
-    from fastapi.responses import JSONResponse
-    from pydantic import BaseModel
-    from typing import Optional
-    
-    class ChatRequest(BaseModel):
-        message: str
-        user_id: Optional[str] = "anonymous"
-        conversation_id: Optional[str] = None
-    
-    class ChatResponse(BaseModel):
-        response: str
-        processing_time: float
-        conversation_id: str
-        timestamp: str
-        model_used: str
-    
-    # FIX: Remove async from endpoints that don't need it
-    @demo.app.post("/api/chat")
-    def api_chat(request: ChatRequest):  # Remove async
-        try:
-            if not request.message.strip():
-                raise HTTPException(status_code=400, detail="Message cannot be empty")
-            
-            security_result = security_system.check_request(request.message, request.user_id)
-            if security_result["is_suspicious"]:
-                raise HTTPException(status_code=429, detail="Request blocked for security reasons")
-            
-            start_time = time.time()
-            response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
-            processing_time = time.time() - start_time
-            
-            return JSONResponse(content={
-                "response": response,
-                "processing_time": processing_time,
-                "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
-                "timestamp": datetime.now().isoformat(),
-                "model_used": Config.MODEL_NAME
-            })
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"API chat error: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
-    
-    # FIX: Remove async and use direct dict return
-    @demo.app.get("/api/health")
-    def api_health():  # Remove async
-        try:
-            status_data = get_system_status()
-            return status_data  # FastAPI automatically converts dict to JSON
-        except Exception as e:
-            logger.error(f"Health endpoint error: {e}")
-            return JSONResponse(
-                content={"status": "error", "error": str(e)},
-                status_code=500
-            )
-    
-    @demo.app.get("/api/models")
-    def api_models():  # Remove async
-        models_info = {
-            "available_models": ["microsoft/Phi-3.5-mini-instruct"],
-            "current_model": Config.MODEL_NAME,
-            "quantization": "Q4_K_M",
-            "context_length": 4096,
-            "parameters": "3.8B"
-        }
-        return models_info  # FastAPI automatically converts dict to JSON
-    
-    @demo.app.get("/api/stats")
-    def api_stats():  # Remove async
-        if not monitor:
-            return JSONResponse(
-                content={"error": "Monitoring system not available"},
-                status_code=503
-            )
-        
-        stats_data = {
-            "total_requests": len(monitor.inference_metrics),
-            "average_response_time": monitor.get_average_response_time(),
-            "error_rate": monitor.get_error_rate(),
-            "uptime": monitor.get_uptime(),
-            "system_health": get_system_status()
-        }
-        return stats_data  # FastAPI automatically converts dict to JSON
-
 if __name__ == "__main__":
     logger.info("🎵 Starting Saem's Tunes AI on Hugging Face Spaces...")
     
@@ -452,14 +449,12 @@ if __name__ == "__main__":
     
     demo = create_gradio_interface()
     
-    setup_api_endpoints(demo)
+    app = gr.mount_gradio_app(fastapi_app, demo, path="/")
     
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=Config.PORT,
-        share=False,
-        show_error=True,
-        debug=Config.LOG_LEVEL == "DEBUG",
-        show_api=True,
-        allowed_paths=["./models", "./config"]
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=Config.PORT,
+        log_level=Config.LOG_LEVEL.lower()
     )

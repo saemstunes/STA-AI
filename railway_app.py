@@ -125,7 +125,11 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to your domains
+    allow_origins=[
+    "https://www.saemstunes.com",
+    "https://saemstunes.com",
+    "http://localhost:8080"  # for development
+]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

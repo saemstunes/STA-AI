@@ -42,8 +42,8 @@ USER saemsai
 EXPOSE 8080
 
 # Health check (uses internal port)
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=5 \
+  CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Start application
 CMD ["python", "railway_app.py"]

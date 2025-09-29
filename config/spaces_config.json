@@ -1,6 +1,6 @@
 {
   "space_name": "saemstunes/STA-AI",
-  "model_used": "microsoft/Phi-3.5-mini-instruct",
+  "model_used": "TinyLlama-1.1B-Chat",
   "quantization": "Q4_K_M",
   "deployment_type": "huggingface_spaces",
   "version": "2.0.0",

@@ -50,7 +50,7 @@ class SaemsTunesAISystem:
         max_response_length: int = 150,
         temperature: float = 0.6,
         top_p: float = 0.85,
-        context_window: int = 2048
+        context_window: int = 1024
     ):
         self.supabase = supabase_integration
         self.security = security_system
@@ -135,7 +135,7 @@ class SaemsTunesAISystem:
                 model_path=self.model_path,
                 n_ctx=self.context_window,
                 n_threads=min(2, os.cpu_count() or 1),
-                n_batch=256,
+                n_batch=128,
                 n_gpu_layers=0,
                 verbose=False,
                 use_mlock=False,
@@ -768,7 +768,7 @@ def create_model_selector(
             "model_file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
             "max_response_length": 100,
             "temperature": 0.5,
-            "context_window": 2048
+            "context_window": 1024
         },
         "balanced": {
             "model_name": "TinyLlama-1.1B-Chat", 

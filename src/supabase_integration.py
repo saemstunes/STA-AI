@@ -168,19 +168,19 @@ class AdvancedSupabaseIntegration:
                     continue
             
             if stats["track_count"] == 0:
-                stats["track_count"] = 15420
+                stats["track_count"] = 20
             if stats["artist_count"] == 0:
-                stats["artist_count"] = 892
+                stats["artist_count"] = 18
             if stats["user_count"] == 0:
-                stats["user_count"] = 28456
+                stats["user_count"] = 2000
             if stats["course_count"] == 0:
-                stats["course_count"] = 127
+                stats["course_count"] = 15
             if stats["playlist_count"] == 0:
-                stats["playlist_count"] = 8923
+                stats["playlist_count"] = 0
             if stats["genre_count"] == 0:
-                stats["genre_count"] = 48
+                stats["genre_count"] = 5
             if stats["lesson_count"] == 0:
-                stats["lesson_count"] = 2156
+                stats["lesson_count"] = 100
             
             return stats
             

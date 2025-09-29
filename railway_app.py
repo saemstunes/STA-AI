@@ -194,8 +194,27 @@ async def root():
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint"""
-    return await root()
+    import psutil
+    systems_ready = all([supabase_integration, security_system, monitor, ai_system])
+
+    return HealthResponse(
+        status="healthy" if systems_ready else "initializing",
+        timestamp=datetime.now().isoformat(),
+        version="2.0.0",
+        environment=Config.ENVIRONMENT,
+        systems={
+            "supabase": bool(supabase_integration),
+            "security": bool(security_system),
+            "monitoring": bool(monitor),
+            "ai_system": bool(ai_system)
+        },
+        resources={
+            "cpu_percent": psutil.cpu_percent(),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent
+        },
+        performance={}
+    )
 
 @app.get("/health", response_model=HealthResponse)
 async def legacy_health_check():

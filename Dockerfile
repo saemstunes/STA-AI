@@ -30,9 +30,6 @@ RUN python scripts/download_model.py
 # Copy all backend code
 COPY . .
 
-# Copy built frontend assets from Node stage
-COPY --from=frontend-builder /frontend/dist ./static
-
 # Create necessary directories
 RUN mkdir -p models logs static
 

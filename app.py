@@ -373,8 +373,9 @@ def setup_api_endpoints(demo):
         timestamp: str
         model_used: str
     
+    # FIX: Remove async from endpoints that don't need it
     @demo.app.post("/api/chat")
-    async def api_chat(request: ChatRequest):
+    def api_chat(request: ChatRequest):  # Remove async
         try:
             if not request.message.strip():
                 raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -387,13 +388,13 @@ def setup_api_endpoints(demo):
             response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
             processing_time = time.time() - start_time
             
-            return JSONResponse(content=ChatResponse(
-                response=response,
-                processing_time=processing_time,
-                conversation_id=request.conversation_id or f"conv_{int(time.time())}",
-                timestamp=datetime.now().isoformat(),
-                model_used=Config.MODEL_NAME
-            ).dict())
+            return JSONResponse(content={
+                "response": response,
+                "processing_time": processing_time,
+                "conversation_id": request.conversation_id or f"conv_{int(time.time())}",
+                "timestamp": datetime.now().isoformat(),
+                "model_used": Config.MODEL_NAME
+            })
             
         except HTTPException:
             raise
@@ -401,11 +402,12 @@ def setup_api_endpoints(demo):
             logger.error(f"API chat error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
     
+    # FIX: Remove async and use direct dict return
     @demo.app.get("/api/health")
-    async def api_health():
+    def api_health():  # Remove async
         try:
             status_data = get_system_status()
-            return JSONResponse(content=status_data)
+            return status_data  # FastAPI automatically converts dict to JSON
         except Exception as e:
             logger.error(f"Health endpoint error: {e}")
             return JSONResponse(
@@ -414,7 +416,7 @@ def setup_api_endpoints(demo):
             )
     
     @demo.app.get("/api/models")
-    async def api_models():
+    def api_models():  # Remove async
         models_info = {
             "available_models": ["microsoft/Phi-3.5-mini-instruct"],
             "current_model": Config.MODEL_NAME,
@@ -422,10 +424,10 @@ def setup_api_endpoints(demo):
             "context_length": 4096,
             "parameters": "3.8B"
         }
-        return JSONResponse(content=models_info)
+        return models_info  # FastAPI automatically converts dict to JSON
     
     @demo.app.get("/api/stats")
-    async def api_stats():
+    def api_stats():  # Remove async
         if not monitor:
             return JSONResponse(
                 content={"error": "Monitoring system not available"},
@@ -439,7 +441,7 @@ def setup_api_endpoints(demo):
             "uptime": monitor.get_uptime(),
             "system_health": get_system_status()
         }
-        return JSONResponse(content=stats_data)
+        return stats_data  # FastAPI automatically converts dict to JSON
 
 if __name__ == "__main__":
     logger.info("🎵 Starting Saem's Tunes AI on Hugging Face Spaces...")

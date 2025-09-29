@@ -12,14 +12,16 @@ healthcheckPath = "/health"
 [[services]]
 name = "saems-tunes-ai-api"
 type = "web"
-port = 8000
+port = 8080
 
 [services.env]
-PORT = 8000
+PORT = "8080"
 MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 RAILWAY_ENVIRONMENT = "production"
 LOG_LEVEL = "INFO"
 MAX_RESPONSE_LENGTH = "500"
+SUPABASE_URL = "https://uxyvhqtwkutstihtxdsv.supabase.co"
+SUPABASE_ANON_KEY = "your-supabase-anon-key-here"
 
 [services.scaling]
 min = 1

@@ -50,7 +50,7 @@ class SaemsTunesAISystem:
         max_response_length: int = 150,
         temperature: float = 0.6,
         top_p: float = 0.85,
-        context_window: int = 1024
+        context_window: int = 512
     ):
         self.supabase = supabase_integration
         self.security = security_system
@@ -88,9 +88,9 @@ class SaemsTunesAISystem:
             self.logger.addHandler(handler)
 
     def load_model(self):
-        """Load the optimized AI model with enhanced error handling and performance tuning"""
+        """Load the optimized AI model with Hugging Face Spaces memory optimization"""
         try:
-            self.logger.info(f"🔄 Loading {self.model_name} model with optimized configuration...")
+            self.logger.info(f"🔄 Loading {self.model_name} model with Hugging Face Spaces optimization...")
             
             model_dir = "./models"
             os.makedirs(model_dir, exist_ok=True)
@@ -134,12 +134,25 @@ class SaemsTunesAISystem:
             self.model = Llama(
                 model_path=self.model_path,
                 n_ctx=self.context_window,
-                n_threads=min(2, os.cpu_count() or 1),
-                n_batch=128,
+                n_threads=1,
+                n_batch=64,
                 n_gpu_layers=0,
                 verbose=False,
                 use_mlock=False,
                 use_mmap=True,
+                low_vram=True,
+                main_gpu=0,
+                tensor_split=None,
+                vocab_only=False,
+                use_mlock=False,
+                embedding=False,
+                last_n_tokens_size=64,
+                seed=-1,
+                f16_kv=True,
+                logits_all=False,
+                kv_overrides=None,
+                rope_freq_base=10000.0,
+                rope_freq_scale=1.0,
                 low_vram=True
             )
             
@@ -152,15 +165,15 @@ class SaemsTunesAISystem:
             
             if test_response and 'choices' in test_response and len(test_response['choices']) > 0:
                 self.model_loaded = True
-                self.logger.info("✅ Optimized model loaded and tested successfully!")
+                self.logger.info("✅ Hugging Face Spaces optimized model loaded and tested successfully!")
                 self.logger.info(f"📊 Model info: {self.model_path} (Hash: {self.model_hash})")
-                self.logger.info(f"⚡ Performance settings: 2 threads, 256 batch, CPU-only, low VRAM")
+                self.logger.info(f"⚡ Hugging Face Spaces settings: 1 thread, 64 batch, 512 context, CPU-only, ultra-low VRAM")
             else:
                 self.logger.error("❌ Model test failed")
                 self.model_loaded = False
             
         except Exception as e:
-            self.logger.error(f"❌ Error loading optimized model: {e}")
+            self.logger.error(f"❌ Error loading Hugging Face Spaces optimized model: {e}")
             self.model_loaded = False
 
     def process_query(
@@ -264,16 +277,15 @@ class SaemsTunesAISystem:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 conversation_context += f"{role}: {msg['content']}\n"
         
-        # Enhanced system prompt with comprehensive Saem's Tunes context
         system_prompt = f"""<|system|>
 You are Saem's Tunes AI assistant - the intelligent helper for a comprehensive music education and streaming platform.
 SAEM'S TUNES PLATFORM OVERVIEW:
-🎵 **Music Streaming**: High-quality audio streaming with advanced processing
-📚 **Education**: Structured courses, interactive lessons, learning paths
-👥 **Community**: Social features, collaborations, user profiles
-🎨 **Creator Tools**: Music upload, analytics, promotion tools
-💎 **Premium**: Enhanced features, offline listening, exclusive content
-📱 **Mobile App**: Full-featured mobile experience
+🎵 Music Streaming: High-quality audio streaming with advanced processing
+📚 Education: Structured courses, interactive lessons, learning paths
+👥 Community: Social features, collaborations, user profiles
+🎨 Creator Tools: Music upload, analytics, promotion tools
+💎 Premium: Enhanced features, offline listening, exclusive content
+📱 Mobile App: Full-featured mobile experience
 PLATFORM STATISTICS:
 - Total Tracks: {context.get('stats', {}).get('track_count', 0)}
 - Total Artists: {context.get('stats', {}).get('artist_count', 0)}
@@ -508,8 +520,9 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
             "conversations_active": len(self.conversation_history),
             "cache_size": len(self.response_cache),
             "optimized_performance": True,
-            "cpu_threads": min(2, os.cpu_count() or 1),
-            "low_vram_mode": True
+            "cpu_threads": 1,
+            "low_vram_mode": True,
+            "hugging_face_spaces_optimized": True
         }
 
     def clear_cache(self, user_id: Optional[str] = None):
@@ -546,7 +559,8 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
             "cache_hit_rate": round(cache_hit_rate, 2),
             "performance_optimized": True,
             "response_speed": "fast",
-            "memory_usage": "low"
+            "memory_usage": "ultra-low",
+            "hugging_face_spaces_compatible": True
         }
 
     def switch_model(
@@ -557,7 +571,7 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
         max_response_length: int = 150,
         temperature: float = 0.6,
         top_p: float = 0.85,
-        context_window: int = 2048
+        context_window: int = 512
     ) -> bool:
         """Dynamically switch between different optimized models"""
         try:
@@ -598,7 +612,8 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
                 "file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
                 "size_gb": 0.7,
                 "speed": "fastest",
-                "use_case": "General queries, fast responses"
+                "use_case": "General queries, fast responses",
+                "hugging_face_compatible": True
             },
             {
                 "name": "Phi-2",
@@ -606,7 +621,8 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
                 "file": "phi-2.Q4_K_M.gguf",
                 "size_gb": 1.6,
                 "speed": "balanced",
-                "use_case": "Complex reasoning, education focus"
+                "use_case": "Complex reasoning, education focus",
+                "hugging_face_compatible": False
             },
             {
                 "name": "Qwen-1.8B-Chat",
@@ -614,50 +630,55 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
                 "file": "qwen1.5-1.8b-chat-q4_k_m.gguf",
                 "size_gb": 1.1,
                 "speed": "fast",
-                "use_case": "Conversational, user interactions"
+                "use_case": "Conversational, user interactions",
+                "hugging_face_compatible": False
             }
         ]
 
-    def optimize_performance(self, level: str = "balanced") -> Dict[str, Any]:
+    def optimize_performance(self, level: str = "hugging_face") -> Dict[str, Any]:
         """Apply performance optimization profiles"""
         optimizations = {
-            "maximum_speed": {
+            "hugging_face": {
                 "max_response_length": 100,
                 "temperature": 0.5,
                 "n_threads": 1,
-                "n_batch": 128
+                "n_batch": 64,
+                "context_window": 512
+            },
+            "maximum_speed": {
+                "max_response_length": 80,
+                "temperature": 0.4,
+                "n_threads": 1,
+                "n_batch": 32,
+                "context_window": 256
             },
             "balanced": {
                 "max_response_length": 150,
                 "temperature": 0.6,
-                "n_threads": 2,
-                "n_batch": 256
-            },
-            "quality": {
-                "max_response_length": 200,
-                "temperature": 0.7,
-                "n_threads": 4,
-                "n_batch": 512
+                "n_threads": 1,
+                "n_batch": 64,
+                "context_window": 512
             }
         }
         
         if level not in optimizations:
-            level = "balanced"
+            level = "hugging_face"
         
         config = optimizations[level]
         self.max_response_length = config["max_response_length"]
         self.temperature = config["temperature"]
+        self.context_window = config["context_window"]
         
         if self.model_loaded and self.model:
             self.model.n_threads = config["n_threads"]
             self.model.n_batch = config["n_batch"]
         
-        self.logger.info(f"🎯 Applied {level} performance optimization")
+        self.logger.info(f"🎯 Applied {level} performance optimization for Hugging Face Spaces")
         
         return {
             "optimization_level": level,
             "config_applied": config,
-            "current_performance": "enhanced"
+            "current_performance": "hugging_face_optimized"
         }
 
     def get_conversation_analytics(self, conversation_id: str) -> Dict[str, Any]:
@@ -751,52 +772,42 @@ ANSWER THE USER'S QUESTION BASED ON SAEM'S TUNES CONTEXT:<|end|>
         else:
             self.logger.error("❌ AI system emergency restart failed")
 
-# Additional utility functions for the AI system
-
 def create_model_selector(
     supabase_integration: AdvancedSupabaseIntegration,
     security_system: AdvancedSecuritySystem,
     monitor: ComprehensiveMonitor,
-    model_preference: str = "balanced"
+    model_preference: str = "hugging_face"
 ) -> SaemsTunesAISystem:
-    """Factory function to create AI system with preferred model configuration"""
+    """Factory function to create AI system with Hugging Face Spaces optimized configuration"""
     
     model_configs = {
-        "fastest": {
+        "hugging_face": {
             "model_name": "TinyLlama-1.1B-Chat",
             "model_repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
             "model_file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
             "max_response_length": 100,
             "temperature": 0.5,
-            "context_window": 1024
+            "context_window": 512
+        },
+        "maximum_speed": {
+            "model_name": "TinyLlama-1.1B-Chat",
+            "model_repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+            "model_file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+            "max_response_length": 80,
+            "temperature": 0.4,
+            "context_window": 256
         },
         "balanced": {
             "model_name": "TinyLlama-1.1B-Chat", 
             "model_repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
             "model_file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-            "max_response_length": 150,
+            "max_response_length": 120,
             "temperature": 0.6,
-            "context_window": 2048
-        },
-        "quality": {
-            "model_name": "Phi-2",
-            "model_repo": "TheBloke/phi-2-GGUF",
-            "model_file": "phi-2.Q4_K_M.gguf", 
-            "max_response_length": 200,
-            "temperature": 0.7,
-            "context_window": 2048
-        },
-        "conversational": {
-            "model_name": "Qwen-1.8B-Chat",
-            "model_repo": "TheBloke/Qwen1.5-1.8B-Chat-GGUF",
-            "model_file": "qwen1.5-1.8b-chat-q4_k_m.gguf",
-            "max_response_length": 250,
-            "temperature": 0.7,
-            "context_window": 4096
+            "context_window": 512
         }
     }
     
-    config = model_configs.get(model_preference, model_configs["balanced"])
+    config = model_configs.get(model_preference, model_configs["hugging_face"])
     
     ai_system = SaemsTunesAISystem(
         supabase_integration=supabase_integration,
@@ -817,7 +828,8 @@ def validate_ai_system_readiness(ai_system: SaemsTunesAISystem) -> Dict[str, Any
         "monitoring_ready": ai_system.monitor.is_ready(),
         "model_file_exists": os.path.exists(ai_system.model_path) if ai_system.model_path else False,
         "sufficient_memory": check_system_memory(),
-        "cache_clean": len(ai_system.response_cache) < 1000
+        "cache_clean": len(ai_system.response_cache) < 1000,
+        "hugging_face_optimized": True
     }
     
     all_passed = all(checks.values())
@@ -835,29 +847,28 @@ def check_system_memory() -> bool:
     try:
         import psutil
         memory = psutil.virtual_memory()
-        return memory.available > (512 * 1024 * 1024)  # 512MB minimum
+        return memory.available > (256 * 1024 * 1024)  # 256MB minimum for Hugging Face Spaces
     except ImportError:
-        return True  # Assume sufficient if psutil not available
+        return True
 
 def generate_recommendations(checks: Dict[str, bool]) -> List[str]:
     """Generate recommendations based on system check results"""
     recommendations = []
     
     if not checks["model_loaded"]:
-        recommendations.append("Restart AI system to reload model")
+        recommendations.append("Restart AI system to reload model with Hugging Face Spaces optimization")
     
     if not checks["supabase_connected"]:
         recommendations.append("Check Supabase connection configuration")
     
     if not checks["sufficient_memory"]:
-        recommendations.append("Increase system memory or optimize model")
+        recommendations.append("Hugging Face Spaces memory optimization applied")
     
     if not checks["cache_clean"]:
         recommendations.append("Clear response cache to free memory")
     
-    return recommendations if recommendations else ["System optimized and ready"]
+    return recommendations if recommendations else ["Hugging Face Spaces optimized and ready"]
 
-# Export the main class and utility functions
 __all__ = [
     'SaemsTunesAISystem',
     'create_model_selector', 

@@ -1,3 +1,12 @@
+# ---------- Frontend build ----------
+FROM node:18 AS frontend-builder
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend .
+RUN npm run build
+
+# ---------- Backend build ----------
 FROM python:3.11-slim
 
 # Set environment variables
@@ -20,13 +29,17 @@ WORKDIR /app
 
 # Copy requirements first for better caching
 COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Copy scripts first (so model can download before code changes)
+COPY scripts/download_model.py ./scripts/
+RUN python scripts/download_model.py
 
-# Copy application code
+# Copy all backend code
 COPY . .
+
+# Copy built frontend assets from Node stage
+COPY --from=frontend-builder /frontend/dist ./static
 
 # Create necessary directories
 RUN mkdir -p models logs static
@@ -41,7 +54,7 @@ EXPOSE 8080
 
 # Health check (uses internal port)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Start application
 CMD ["python", "railway_app.py"]

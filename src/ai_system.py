@@ -144,7 +144,6 @@ class SaemsTunesAISystem:
                 main_gpu=0,
                 tensor_split=None,
                 vocab_only=False,
-                use_mlock=False,
                 embedding=False,
                 last_n_tokens_size=64,
                 seed=-1,
@@ -152,8 +151,7 @@ class SaemsTunesAISystem:
                 logits_all=False,
                 kv_overrides=None,
                 rope_freq_base=10000.0,
-                rope_freq_scale=1.0,
-                low_vram=True
+                rope_freq_scale=1.0
             )
             
             test_response = self.model.create_completion(

@@ -127,8 +127,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
     "https://www.saemstunes.com",
-    "https://saemstunes.com",
-    "http://localhost:8080"  # for development
+    "https://saemstunes.com"
 ]
     allow_credentials=True,
     allow_methods=["*"],

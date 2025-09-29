@@ -357,6 +357,7 @@ def create_gradio_interface():
 
 def setup_api_endpoints(demo):
     from fastapi import FastAPI, HTTPException
+    from fastapi.responses import JSONResponse
     from pydantic import BaseModel
     from typing import Optional
     
@@ -386,13 +387,13 @@ def setup_api_endpoints(demo):
             response = ai_system.process_query(request.message, request.user_id, request.conversation_id)
             processing_time = time.time() - start_time
             
-            return ChatResponse(
+            return JSONResponse(content=ChatResponse(
                 response=response,
                 processing_time=processing_time,
                 conversation_id=request.conversation_id or f"conv_{int(time.time())}",
                 timestamp=datetime.now().isoformat(),
                 model_used=Config.MODEL_NAME
-            )
+            ).dict())
             
         except HTTPException:
             raise
@@ -402,30 +403,43 @@ def setup_api_endpoints(demo):
     
     @demo.app.get("/api/health")
     async def api_health():
-        return get_system_status()
+        try:
+            status_data = get_system_status()
+            return JSONResponse(content=status_data)
+        except Exception as e:
+            logger.error(f"Health endpoint error: {e}")
+            return JSONResponse(
+                content={"status": "error", "error": str(e)},
+                status_code=500
+            )
     
     @demo.app.get("/api/models")
     async def api_models():
-        return {
+        models_info = {
             "available_models": ["microsoft/Phi-3.5-mini-instruct"],
             "current_model": Config.MODEL_NAME,
             "quantization": "Q4_K_M",
             "context_length": 4096,
             "parameters": "3.8B"
         }
+        return JSONResponse(content=models_info)
     
     @demo.app.get("/api/stats")
     async def api_stats():
         if not monitor:
-            return {"error": "Monitoring system not available"}
+            return JSONResponse(
+                content={"error": "Monitoring system not available"},
+                status_code=503
+            )
         
-        return {
+        stats_data = {
             "total_requests": len(monitor.inference_metrics),
             "average_response_time": monitor.get_average_response_time(),
             "error_rate": monitor.get_error_rate(),
             "uptime": monitor.get_uptime(),
             "system_health": get_system_status()
         }
+        return JSONResponse(content=stats_data)
 
 if __name__ == "__main__":
     logger.info("🎵 Starting Saem's Tunes AI on Hugging Face Spaces...")

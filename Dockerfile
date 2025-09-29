@@ -1,12 +1,4 @@
-# ---------- Frontend build ----------
-FROM node:18 AS frontend-builder
-WORKDIR /frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend .
-RUN npm run build
 
-# ---------- Backend build ----------
 FROM python:3.11-slim
 
 # Set environment variables
